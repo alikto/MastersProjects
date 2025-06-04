@@ -1,0 +1,254 @@
+---
+output:
+  html_document: default
+---
+<style>
+    h1, h2{
+        text-align: center;
+    }
+
+    h1{
+        text-align: center;
+        font-size: 3em;
+        font-weight: bold;
+    }
+
+    h3{
+        font-weight: bold;
+        background-color: rgb(230, 230, 230);
+        padding-left: 20px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        margin-top: 50px;
+    }
+
+    table{
+        width: 100%;
+    }
+    
+    h4{
+        display: block;
+        width: 100%;
+        padding-right: 20px;
+        text-align: right;
+        font-weight: bold;
+        background-color: rgb(240,240,240);
+    }
+
+</style>
+
+# CMP713 Data Mining
+## 2024-2025 Spring - Assigment 2
+## Given 12/05/2025, Due 21/05/2025 (excluded)
+
+
+
+```{r, echo=F}
+library(knitr)
+rm(list = ls())
+student_name = "Gizem Aleyna Tuzcu"
+student_id   = "N24120196"
+grades       = c(15,10,10)
+given        = c(0,0,0)
+
+head_matter <- data.frame(Name  = c(student_name, ""),
+                          ID    = c(student_id, ""),
+                          Points= c("Max", "Given"),
+                          Task1 = c(grades[1], given[1]),
+                          Task2 = c(grades[2], given[2]),
+                          Task3 = c(grades[3], given[3]),
+                          Total = c(sum(grades), sum(given)))
+kable(head_matter)
+```
+
+In this assignment you will work on a synthetic dataset related to the fictional *Zoomba* fruit. Note 
+that the zoomba fruit is completely fictional and does not exist in reality. 
+
+Do not change anything in this document, other than `student_name` and `student_id` variables in the above chunk, and the Answer sections below. In this assignment, you will submit your Rmd file at the end. Your solution should assume that the raw data is imported from [`zoomba_train.csv`](zoomba_train.csv) file in the same folder as your Rmd file. 
+
+Your solution should never install new packages! Only the packages we have shown in the course are allowed, and these are already installed on my computer. So, do not try to reinstall them (please!).
+
+Good luck!
+
+
+
+### TASK 1
+
+Import the data into R. Employ a brief exploratory data analysis to understand and preprocess the 
+data. Draw plots when necessary but don't overdo it! 
+
+You are expected to 
+
+- Understand feature distributions
+- Handle NAs (if any)
+- Deal with anomalies (if any)
+
+#### Explanation
+
+First, NA values are read from csv file, they were written to file as "???". "sweetness_level" feature has 294NA values and filled with "mean value" of the feature. 
+After that, categorical features encoded so that the model can handle the data.
+And lastly, outliers are removed from the dataset and instead filled with mean values.
+
+#### Answer
+```{r, cache=F}
+library(ggplot2)
+library(dplyr)
+library(e1071)
+library(rpart)
+library(cluster)
+
+zoomba_data <- read.csv("zoomba_train.csv", na.strings = "???")
+zoomba_data <- zoomba_data %>% select(-fruit_id)
+
+str(zoomba_data)
+summary(zoomba_data)
+head(zoomba_data)
+
+colSums(is.na(zoomba_data))
+# 294 NA values exist in sweetness 
+
+# NA values filled with mean value of rest
+zoomba_data$sweetness_level[is.na(zoomba_data$sweetness_level)]<-mean(zoomba_data$sweetness_level,na.rm=TRUE)
+
+colSums(is.na(zoomba_data))
+
+numeric_features <- sapply(zoomba_data, is.numeric)
+numeric_features
+
+#converting categorical value to numeric
+
+categorical_featues <- sapply(zoomba_data, is.character)
+categorical_featues
+
+
+for (col in names(zoomba_data)[categorical_featues]) {
+  print(col)
+  zoomba_data[[col]] <-  as.numeric(factor(zoomba_data[[col]]))
+}
+
+
+```
+
+
+
+```{r, cache=F}
+
+par(mfrow = c(1, 2))
+for (col in names(zoomba_data)[numeric_features]) {
+  hist(zoomba_data[[col]],col = "blue", main = paste("hist of", col), xlab = col)
+  boxplot(zoomba_data[[col]], main = paste("boxplot of", col),col = "orange",horizontal = TRUE)
+}
+
+detect_outlier <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 -1.5 * IQR
+  uper_bound <- Q3 +1.5 * IQR
+  return(x < lower_bound | x > uper_bound)
+}
+
+cols_to_check = c("length_cm", "price", "weight_g")
+
+for (col in cols_to_check) {
+  outliers <- detect_outlier(zoomba_data[[col]])
+  num_outliers <- sum(outliers, na.rm = TRUE)
+  
+  cat("\nColumn:", col, "\n")
+  cat("Number of outliers:", num_outliers, "\n")
+  
+  if (num_outliers > 0) {
+    mean_val <- mean(zoomba_data[[col]][!outliers], na.rm = TRUE)
+    zoomba_data[[col]][outliers] <- mean_val
+    cat("Outliers replaced with mean.\n")
+  } else {
+    cat("No outliers found.\n")
+  }
+}
+
+```
+
+
+
+### TASK 2
+
+Develop a model to predict the price of a Zoomba fruit. You can use the models we learned in class
+but not anything else. You are allowed to employ clustering, dependency modelling, decision tree 
+models or SVM. You are not allowed to use any models beyond that, such as random forest or ANN. 
+
+You must store your model as `my_model`, otherwise the next Task will fail and you will lose marks.
+
+#### Explanation
+A SVM model is developed and fine-tuned across different parameters such as cost, gamma and epsilon values.
+Best model has been choosen according to lowest RMSE value.
+Dataset is divided into train and validation parts for the model by 80-20 ratio.
+
+#### Answer
+```{r, cache=F}
+
+set.seed(456)
+
+n <- nrow(zoomba_data)
+train_index <- sample(1:n, size = 0.8 * n)
+
+train_data <- zoomba_data[train_index, ]
+val_data <- zoomba_data[-train_index, ]
+
+cost_values <- c(0.1, 1, 10)
+gamma_values <- c(0.1, 0.25, 0.5)
+epsilon = c(0.01, 0.1, 0.2)
+
+best_model <- NULL
+lowest_rmse <- Inf
+
+for (c in cost_values) {
+  for (g in gamma_values) {
+    for (e in epsilon) {
+      model <- svm(price ~ ., data = train_data, type = "eps-regression", cost = c, gamma = g, epsilon= e)
+      preds <- predict(model, val_data)
+      rmse <- sqrt(mean((preds - val_data$price)^2))
+      
+      if (rmse < lowest_rmse) {
+        lowest_rmse <- rmse
+        best_model <- model
+      }
+    }
+    
+  }
+}
+
+my_model  <- best_model
+
+```
+
+### TASK 3
+
+You are not allowed to write/change any code for this Task. This task will be executed by the 
+instructor for automatic evaluation. You will **not** be given the `zoomba_test.csv` file at any times. 
+
+#### Note
+Since encoding and NA value filling done previously, little adjustments done here too.
+
+#### Answer
+
+```{r, cache=F}
+if (FALSE)
+{
+  test_data <- read.csv("zoomba_test.csv", na.strings = "???")
+  test_data <- test_data %>% select(-fruit_id)
+  
+  test_data$species         <- as.numeric(factor(test_data$species))
+  test_data$ripeness        <- as.numeric(factor(test_data$ripeness))
+  test_data$origin          <- as.numeric(factor(test_data$origin))
+  
+  test_data$sweetness_level[is.na(test_data$sweetness_level)] <- mean(
+    test_data$sweetness_level, na.rm = TRUE
+  )
+  
+  
+  
+  predictions <- predict(my_model, select(test_data, -price))
+  
+  mean(abs(test_data$price - predictions))
+}
+```

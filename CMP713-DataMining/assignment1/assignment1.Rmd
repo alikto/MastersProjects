@@ -1,0 +1,187 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+<style>
+    h1, h2{
+        text-align: center;
+    }
+
+    h1{
+        text-align: center;
+        font-size: 3em;
+        font-weight: bold;
+    }
+
+    h3{
+        font-weight: bold;
+        background-color: rgb(230, 230, 230);
+        padding-left: 20px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        margin-top: 50px;
+    }
+
+    table{
+        width: 100%;
+    }
+    
+    h4{
+        display: block;
+        width: 100%;
+        padding-right: 20px;
+        text-align: right;
+        font-weight: bold;
+        background-color: rgb(240,240,240);
+    }
+
+</style>
+
+# CMP713 Data Mining
+## 2024-2025 Spring - Assigment 1
+## Given 07/04/2025, Due 16/04/2025 (excluded)
+
+
+
+```{r, echo=F}
+library(knitr)
+student_name = "Gizem Aleyna Tuzcu"
+student_id   = "N24120196"
+grades       = c(3,6,6,10)
+given        = c(0,0,0,0)
+
+head_matter <- data.frame(Name  = c(student_name, ""),
+                          ID    = c(student_id, ""),
+                          Points= c("Max", "Given"),
+                          Task1 = c(grades[1], given[1]),
+                          Task2 = c(grades[2], given[2]),
+                          Task3 = c(grades[3], given[3]),
+                          Task4 = c(grades[4], given[4]),
+                          Total = c(sum(grades), sum(given)))
+kable(head_matter)
+```
+
+In this assignment you will work on the [Dry Bean Dataset](https://archive.ics.uci.edu/ml/datasets/dry+bean+dataset) from the UCI Machine Learning Repository to explore the properties of the dataset, such as identifying the shapes of the distributions of its features. 
+
+Do not change anything in this document, other than `student_name` and `student_id` variables in the above chunk, and the Answer sections below. You will submit your Rmd file at the end. Your solution should assume that the raw data is imported from `Dry_Bean_Dataset.xlsx` file in the same folder as your Rmd file. 
+
+Your solution should never install new packages! Only the packages we have shown in the course are allowed, and these are already installed on my computer. So, do not try to reinstall them (please!).
+
+Good luck!
+
+
+
+### TASK 1
+Import the data from the file into R. Be careful with the extent of the data, do not accidentally trim it. 
+You should be reading 13611 data rows and 16+1 features. 
+
+When you import the data, print out the number of rows and number of columns.
+Also read (literally, with your eyes) the explanations of each feature on the website.
+
+#### Answer
+```{r, cache=T}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+beans <- read_excel("Dry_Bean_Dataset.xlsx")
+cat("Number of rows:", nrow(beans), "\n")
+
+
+cat("Number of columns:", ncol(beans), "\n")
+
+```
+
+
+
+### TASK 2
+Draw a histogram for each feature of the data (except the target column at the end). 
+
+  - Discuss the shapes of the distributions
+  - Do you notice anything weird?
+  - What can be learned about the data from these plots?
+  
+#### Answer
+```{r, cache=T}
+
+
+selected_columns <- colnames(beans)[1:16]
+
+par(mfrow = c(4,4),mar = c(1, 4,4, 1))
+
+for (colname in selected_columns) {
+  hist(beans[[colname]],
+       main = paste("Hist. of", colname),
+       xlab = colname,
+       col="purple")
+}
+
+par(mfrow = c(1, 1))
+
+```
+General observation about the data is most of them are right or left skewed, this means they tend to have smaller/larger values and a few outliers. For example, for Solidity feature, histogram suggests that most of the beans are solid and there are only a few un-solid ones exists.
+Some features like AspectRatio, Extent, Compactness etc. have more like a normal distributions. Thay can be good features for classification modals.
+Since many features are largely skewed, they need to be normalized in order to use in classification modals.
+
+### TASK 3
+Draw a boxplot for each feature of the data (except the target column at the end). 
+
+  - Discuss the shapes of the plots
+  - Do you notice anything weird?
+  - Why do you have so many "outliers"? Discuss potential reasons. 
+  - What can be learned about the data from these plots?
+
+#### Answer
+
+```{r, cache=T}
+
+
+par(mfrow = c(4,4), mar = c(2, 4, 4, 1))
+
+for (colname in selected_columns) {
+  boxplot(beans[[colname]],
+          main = paste("Boxplot of", colname),
+          col = "lightblue",
+          horizontal = TRUE)
+}
+
+par(mfrow = c(1,1))
+
+
+```
+Most of the plots have skewed distrubition, and many of them are right skewed (where most values are on the left side of the plot and tails longs to right). 
+Some feature like Compactness, Solidity have a cluster in the middle and shows more symetric ditrubition, where box plot is centered in the middle and there are fewer extreme outliers.
+One weird thing is that there are many outliers in several features like Area, ConvexArea. For features like indicates size or shape have dominated number of outliers.
+Possible reasons might be variable nature of beans since they can have many physical features. Also, since data of many species of beans are in the main data, their natural differences can be seen as outliers. 
+Since some features (like Solidity, ShapeFactory4 etc.) are compact in one side of plot, seperating species from this features might not be possible. Other classes like Area, AspectRatio etc. have more information about classes.
+Many features are not normally distrubuted, so they need transformation. 
+
+### TASK 4
+Draw a boxplot of each feature again, but this time facet the data with respect to the dry bean classes in the target feature (Class). 
+
+  - Explain your findings after this new insight into the data
+  - Try to use the plots from Task 2, Task 3 and Task 4 together to come up with some understanding of the data.
+  - What are some useful features to classify dry beans and what are the potentially unnecessary features?
+  
+#### Answer
+
+```{r, cache=T}
+
+for (colname in selected_columns) {
+  p <- ggplot(beans, aes_string(x = "Class", y = colname)) +
+    geom_boxplot(fill = "forestgreen") +
+    labs(x = "Class", y = colname, title = paste("Boxplot of", colname, "by Class")) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)
+}
+
+```
+
+
+Features like Extent, Eccentricity, Solidity, ShapeFactory4 have less variation based on the species. They have little information for classification, so they can be discarded for future usage like analysis, ML modeling. 
+Also, the visualization shows that, Area, Perimeter,MajorAxisLength, MinorAxisLength have similar distrubition pattern. A next step to take might be examining correlation coefficient to search if they are correlated. If coefficient is close to 1, droping them and choosing one of them to use is better to prevent multicollinearity and  reduce dimensionality.This can be applied to ShapeFactory2 and ShapeFactory3.
+Other Features like Roundness, Compactness shows variation accross species of beans and can give benefitial information for modals and analysis.
